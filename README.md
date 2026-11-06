@@ -8,7 +8,7 @@ This repo is my learning journey: building things step by step, from the ground 
 
 I began by experimenting with NumPy on my own, without much structure. It taught me a lot, but I wasn't being serious about it yet. Then I picked up a book that walks through the topic properly, and I committed to doing this right.
 
-That book is [*Build a Large Language Model From Scratch*] by [Sebastian Raschka]. It builds everything with **PyTorch**, so that's what this repo uses from here on. My early NumPy experiments are still in the `numPy` folder as a record of where I started.
+That book is [*Build a Large Language Model From Scratch*](http://mng.bz/orYv) by [Sebastian Raschka](https://sebastianraschka.com/). It builds everything with **PyTorch**, so that's what this repo uses from here on. My early NumPy experiments are still in the `numPy` folder as a record of where I started.
 
 ## Why I'm doing this
 
