@@ -1,87 +1,160 @@
 """
-    ===============================================================================================================================
+Stage 1: Building LLM
+    1. Data preparation
+    2. Attention Mechanism
+    3. LLM architecture
+        4. Pretraining
 
-    * This is a simple implementation of a neural network layer using a manual loop and NumPy for computation.
-    * It demonstrates how to compute the outputs of a layer of neurons given inputs, weights, and biases.
+Stage 2: Foundation Model
+    5. Training loop
+    6. Model Evaluation
+    7. Load Pretrained weights
+        8. Fine-tuning
+"""
 
-    **Think of it this way:
-                            outputs = inputs * weights + biases
-    same as:                y = mx + b
+"""
 
-    * The code first computes the outputs using a manual loop and then compares it with the NumPy implementation using the dot product.
-    * The outputs from both methods should be the same, confirming the correctness of the manual implementation
-    * and the efficiency of using NumPy for such operations.
-    *
-    * The inputs represent the features fed into the layer, while the weights and biases are parameters that
-    * determine how the inputs are transformed into outputs. Each neuron in the layer has its own set of weights and a bias, 
-    * and the output of each neuron is computed as the weighted sum of the inputs plus the bias.
-    *
-    * The final outputs of the layer are printed to the console, allowing for verification of the results.
-    *
-    * Note: The code assumes that the inputs, weights, and biases are correctly shaped and compatible for the operations performed.
+Data preparation
 
-    ===============================================================================================================================
-""" 
+"""
+#Get file
+"""
+import os
+import urllib.request
+
+if not os.path.exists("the-verdict.txt"):
+    url = ("https://raw.githubusercontent.com/rasbt/"
+           "LLMs-from-scratch/main/ch02/01_main-chapter-code/"
+           "the-verdict.txt")
+    file_path = "the-verdict.txt"
+    urllib.request.urlretrieve(url, file_path)
+"""
+
+#Open and print some to ensure its working fine
+"""
+with open("the-verdict.txt", "r", encoding="utf-8") as f:
+    raw_text = f.read()
+    
+print("Total number of character:", len(raw_text))
+print(raw_text[:99])
+"""
+
+#Data tockenisation
+#Split the text ===> word2Vec
+"""
+import re
+text = "hello world. This is example text!"
+result = re.split(r'([,.:;?_!"()\']|--|\s)', text)
+print(result)
+
+"""
+
+#Data tockenisation
+#Split the text in entire file and strip to remove white spaces
+import re
+with open("the-verdict.txt", "r", encoding="utf-8") as f:
+    raw_text = f.read()
+
+preprocessed = re.split(r'([,.:;?_!"()\']|--|\s)', raw_text)
+preprocessed = [item.strip() for item in preprocessed if item.strip()]
+#print(preprocessed[:30])
+#print(len(preprocessed))
+
+#Create vocabulary by assigning each unique word an index
+#store them in a set
+all_words = sorted(set(preprocessed))
+vocab_size = len(all_words)
+
+#print(vocab_size)
+
+vocab = {token:integer for integer,token in enumerate(all_words)}
+#Below are the first 50 entries in this vocabulary:
+for i, item in enumerate(vocab.items()):
+    #print(item)
+    if i >= 50:
+        break
 
 
+#putting together
 
-#import sys
-import numpy as np
+class SimpleTokenizerV1:
+    def __init__(self, vocab):
+        self.str_to_int = vocab
+        self.int_to_str = {i:s for s,i in vocab.items()}
 
-#print("Python version:", sys.version) #3.13.13 
-#print("NumPy version:", np.__version__) #2.5.0
+    #Process input text into tocken Id
+    def encode(self, text):
+        preprocessed = re.split(r'([,.:;?_!"()\']|--|\s)', text)
+                                
+        preprocessed = [
+            item.strip() for item in preprocessed if item.strip()
+        ]
+        ids = [self.str_to_int[s] for s in preprocessed]
+        return ids
 
+    #convert token IDs back to text 
+    def decode(self, ids):
+        text = " ".join([self.int_to_str[i] for i in ids])
+        # Replace spaces before the specified punctuations
+        text = re.sub(r'\s+([,.?!"()\'])', r'\1', text)
+        return text
+    
+#We can use the tokenizer to encode (that is, tokenize) texts into integers
+tokenizer = SimpleTokenizerV1(vocab)
 
-print('------------------------------------------------------------------------------')
-inputs = [1,2,3,2.5] #we usually dont control the inputs, but can tune the weights and biases to get the desired outputs
-
-#(3,4) 3 neurons, 4 inputs
-neuron_weights = [[0.2, 0.8, -0.5, 1.0], [0.5, -0.91, 0.26, -0.5], [-0.26, -0.27, 0.17, 0.87]]
-
-biases = [2, 3, 0.5]  # one bias per neuron, shifts the output independent of inputs
-
-#using a manual loop to compute the outputs of the layer
-layer_outputs = []
-for neuron_w, neuron_bias in zip(neuron_weights, biases):
-    neuron_output = 0
-    for n_input, weight in zip(inputs, neuron_w):
-        neuron_output += n_input * weight
-    neuron_output += neuron_bias
-    layer_outputs.append(neuron_output)
-print("loop=== " + str(layer_outputs))
-
-print()
-
-#using NumPy to compute the outputs of the layer
-numpy_layer_outputs = np.dot(neuron_weights, inputs) + biases
-print("NumPy=== " + str(numpy_layer_outputs))
-
-
-print('------------------------------------------------------------------------------')
+text = """"It's the last he painted, you know," 
+           Mrs. Gisburn said with pardonable pride."""
+ids = tokenizer.encode(text)
+#print(ids)
+#print(tokenizer.decode(ids))
 
 
+#Hello was no used in original training data so it will result into an error
+text = "hello, do you know me?"
+#print(tokenizer.encode(text))
 
+#=======================================================================================================================================================================
 
-#a simple diagram to visualize the layer of neurons and their connections to the inputs
-print("""
-  x1 (1.0)   ─┐
-  x2 (2.0)   ─┼──► N1
-  x3 (3.0)   ─┤
-  x4 (2.5)   ─┘
+#Expand vocabulary to add new words and data
+all_tokens = sorted(list(set(preprocessed)))
+all_tokens.extend(["<|endoftext|>", "<|unk|>"])
 
-  x1 (1.0)   ─┐
-  x2 (2.0)   ─┼──► N2
-  x3 (3.0)   ─┤
-  x4 (2.5)   ─┘
+vocab = {token:integer for integer,token in enumerate(all_tokens)}
+#print(len(vocab.items()))
 
-  x1 (1.0)   ─┐
-  x2 (2.0)   ─┼──► N3
-  x3 (3.0)   ─┤
-  x4 (2.5)   ─┘
-""")
+#print thelast 5 so we ca confirm new vocabulary was added
+# for i, item in enumerate(list(vocab.items())[-5:]):
+#     print(item)
 
-# for i, neuron_w in enumerate(neuron_weights):
-#     for j, val in enumerate(inputs):
-#         connector = '─┼──►' if j == len(inputs) // 2 else ('─┐' if j == 0 else ('─┘' if j == len(inputs)-1 else '─┤'))
-#         print(f"  x{j+1} ({val})   {connector}" + (f" N{i+1}" if j == len(inputs) // 2 else ""))
-#     print()
+class SimpleTokenizerV2:
+    def __init__(self, vocab):
+        self.str_to_int = vocab
+        self.int_to_str = { i:s for s,i in vocab.items()}
+    
+    def encode(self, text):
+        preprocessed = re.split(r'([,.:;?_!"()\']|--|\s)', text)
+        preprocessed = [item.strip() for item in preprocessed if item.strip()]
+        preprocessed = [
+            item if item in self.str_to_int 
+            else "<|unk|>" for item in preprocessed #if input text is unknown
+        ]
+
+        ids = [self.str_to_int[s] for s in preprocessed]
+        return ids
+        
+    def decode(self, ids):
+        text = " ".join([self.int_to_str[i] for i in ids])
+        # Replace spaces before the specified punctuations
+        text = re.sub(r'\s+([,.:;?!"()\'])', r'\1', text)
+        return text
+
+#Let's try to tokenize text with the modified tokenizer:
+
+tokenizer = SimpleTokenizerV2(vocab)
+text1 = "Hello, do you like tea?"
+text2 = "In the sunlit terraces of the palace."
+text = " <|endoftext|> ".join((text1, text2))
+print(text) #Hello, do you like tea? <|endoftext|> In the sunlit terraces of the palace.
+
+print(tokenizer.encode(text)) #[1131, 5, 355, 1126, 628, 975, 10, 1130, 55, 988, 956, 984, 722, 988, 1131, 7]
+print(tokenizer.decode(tokenizer.encode(text))) #<|unk|>, do you like tea? <|endoftext|> In the sunlit terraces of the <|unk|>.
