@@ -143,8 +143,9 @@ class SimpleTokenizerV2:
         return ids
         
     def decode(self, ids):
+        #join the tockens while adding white spaces
         text = " ".join([self.int_to_str[i] for i in ids])
-        # Replace spaces before the specified punctuations
+        # Remove spaces before the specified punctuations
         text = re.sub(r'\s+([,.:;?!"()\'])', r'\1', text)
         return text
 
@@ -154,7 +155,110 @@ tokenizer = SimpleTokenizerV2(vocab)
 text1 = "Hello, do you like tea?"
 text2 = "In the sunlit terraces of the palace."
 text = " <|endoftext|> ".join((text1, text2))
-print(text) #Hello, do you like tea? <|endoftext|> In the sunlit terraces of the palace.
+#print(text) #Hello, do you like tea? <|endoftext|> In the sunlit terraces of the palace.
 
-print(tokenizer.encode(text)) #[1131, 5, 355, 1126, 628, 975, 10, 1130, 55, 988, 956, 984, 722, 988, 1131, 7]
-print(tokenizer.decode(tokenizer.encode(text))) #<|unk|>, do you like tea? <|endoftext|> In the sunlit terraces of the <|unk|>.
+#print(tokenizer.encode(text)) #[1131, 5, 355, 1126, 628, 975, 10, 1130, 55, 988, 956, 984, 722, 988, 1131, 7]
+#print(tokenizer.decode(tokenizer.encode(text))) #<|unk|>, do you like tea? <|endoftext|> In the sunlit terraces of the <|unk|>.
+
+
+
+#===============================================================BPE========================================================================
+
+import importlib.metadata
+import tiktoken
+
+# print("tiktoken version:", importlib.metadata.version("tiktoken"))
+
+bpe_tockenizer = tiktoken.get_encoding("gpt2")
+text = (
+    "Hello, do you like tea? <|endoftext|> In the sunlit terraces"
+     "of someunknownPlace."
+)
+
+integers = bpe_tockenizer.encode(text, allowed_special={"<|endoftext|>"})
+
+#print(integers)
+
+#print(bpe_tockenizer.decode(integers))
+
+#==========================================================Data sampling with sliding window==============================================================================================
+with open("the-verdict.txt", "r", encoding="utf-8") as f:
+    raw_text = f.read()
+enc_text = bpe_tockenizer.encode(raw_text)
+    
+print("Total number of character:", len(enc_text))
+
+#Grab the the rest of the story after the first 50 tockens
+enc_sample = enc_text[50:]
+
+context_size = 4
+
+x = enc_sample[:context_size] #input tocken
+y = enc_sample[1:context_size+1] #Target tockens
+
+#print(f"x: {x}")
+#print(f"y:      {y}")
+
+#here we are mimicing prediction to facilitate training so later the model can understand which tokens could be next in sequence
+
+#taking a sample and sliding the window to reveal the next token
+for i in range(1, context_size+1):
+    context = enc_sample[:i]
+    desired = enc_sample[i]
+
+    print(context, "---->", desired)
+
+#now using decoded tokens
+for i in range(1, context_size+1):
+    context = enc_sample[:i]
+    desired = enc_sample[i]
+
+    print(bpe_tockenizer.decode(context), "---->", bpe_tockenizer.decode([desired]))
+
+#Create dataset and dataloader that extract chunks from the input text dataset
+import torch
+from torch.utils.data import Dataset, DataLoader
+
+print("PyTorch version:", torch.__version__)
+
+class GPTDatasetV1(Dataset):
+    def __init__(self, txt, tokenizer, max_length, stride):
+        self.input_ids = []
+        self.target_ids = []
+
+        # Tokenize the entire text
+        token_ids = tokenizer.encode(txt, allowed_special={"<|endoftext|>"})
+        assert len(token_ids) > max_length, "Number of tokenized inputs must at least be equal to max_length+1"
+
+        # Use a sliding window to chunk the book into overlapping sequences of max_length
+        for i in range(0, len(token_ids) - max_length, stride):
+            input_chunk = token_ids[i:i + max_length]
+            target_chunk = token_ids[i + 1: i + max_length + 1]
+            self.input_ids.append(torch.tensor(input_chunk))
+            self.target_ids.append(torch.tensor(target_chunk))
+
+    def __len__(self):
+        return len(self.input_ids)
+
+    def __getitem__(self, idx):
+        return self.input_ids[idx], self.target_ids[idx]
+def create_dataloader_v1(txt, batch_size=4, max_length=256, 
+                         stride=128, shuffle=True, drop_last=True,
+                         num_workers=0):
+
+    # Initialize the tokenizer
+    tokenizer = tiktoken.get_encoding("gpt2")
+
+    # Create dataset
+    dataset = GPTDatasetV1(txt, tokenizer, max_length, stride)
+
+    # Create dataloader
+    dataloader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        drop_last=drop_last,
+        num_workers=num_workers
+    )
+
+    return dataloader
